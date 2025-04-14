@@ -4,7 +4,7 @@
 Automatically detect anomalies in industrial machine data using R and GitHub Actions.
 
 ## Files
-- `ai4i2020.csv`: Input dataset
+- `predictive_maintenance.csv`: Input dataset
 - `anomaly_detection.R`: Anomaly detection using Z-Score
 - `run_r_script.yml`: GitHub Action to automate detection and output
 
