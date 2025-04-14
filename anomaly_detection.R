@@ -7,7 +7,7 @@ library(ggplot2)
 library(dplyr)
 
 # Read the CSV file from local path
-file_path <- "C:/Users/91701/OneDrive/Desktop/Predictive Maintainence.csv"
+file_path <- "predictive_maintenance.csv"
 df <- read.csv(file_path, check.names = FALSE)
 
 # View column names to confirm
