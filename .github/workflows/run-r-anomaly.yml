@@ -30,4 +30,15 @@ jobs:
           # List specific files if necessary, e.g.
           ls -la anomalies_output.csv anomaly_plot.png summary.txt
 
+      - name: Upload anomaly files as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+           name: anomaly-detection-output
+           path: |
+            anomalies_output_${{ github.run_id }}.csv
+            anomaly_plot_${{ github.run_id }}.png
+            summary_${{ github.run_id }}.txt
+
+
+
   
