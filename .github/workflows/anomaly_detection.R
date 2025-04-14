@@ -44,3 +44,12 @@ ggplot(df, aes(x = `Rotational speed [rpm]`, y = `Torque [Nm]`)) +
        x = "Rotational Speed (rpm)",
        y = "Torque (Nm)")
 
+# Save anomaly data
+write.csv(anomalies, "anomalies_output.csv", row.names = FALSE)
+
+# Create a summary
+summary_text <- paste("✅ Anomaly Detection Complete.\nTotal records:", nrow(df),
+                      "\nAnomalies found:", nrow(anomalies), "\nTimestamp:", Sys.time())
+
+writeLines(summary_text, "summary.txt")
+
