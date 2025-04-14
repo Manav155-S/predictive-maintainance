@@ -23,3 +23,11 @@ jobs:
       - name: Run anomaly detection script
         run: |
           Rscript anomaly_detection.R
+
+      - name: Upload anomaly detection results as artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: anomaly-detection-results
+          path: |
+            ./anomalies_output.csv      
+            ./anomaly_plot.png 
