@@ -3,7 +3,7 @@ name: Run Anomaly Detection in R
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch:  # Allows manual trigger
 
 jobs:
   run-r-script:
@@ -23,9 +23,3 @@ jobs:
       - name: Run anomaly detection script
         run: |
           Rscript anomaly_detection.R
-
-      - name: Upload anomaly output
-        uses: actions/upload-artifact@v3
-        with:
-          name: anomalies-output
-          path: anomalies_output.csv
