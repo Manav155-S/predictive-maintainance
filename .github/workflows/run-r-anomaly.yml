@@ -25,7 +25,7 @@ jobs:
           Rscript anomaly_detection.R
 
       - name: Upload anomaly detection results as artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: anomaly-detection-results
           path: |
