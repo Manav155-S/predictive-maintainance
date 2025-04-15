@@ -1,4 +1,4 @@
-name: Run Anomaly Detection in R
+name: Run Anomaly Detection in R and Test Streamlit App
 
 on:
   push:
@@ -27,17 +27,40 @@ jobs:
       - name: Upload anomaly files as artifacts
         uses: actions/upload-artifact@v4
         with:
-         name: anomaly-detection-output
-         path: |
-          anomalies_output.csv
-          anomaly_plot.png
-          summary.txt
-          
+          name: anomaly-detection-output
+          path: |
+            anomalies_output.csv
+            anomaly_plot.png
+            summary.txt
+
       - name: List files in current directory
         run: |
           ls -la
-          # List specific files if necessary, e.g.
           ls -la anomalies_output.csv anomaly_plot.png summary.txt
 
+  test-streamlit-app:
+    runs-on: ubuntu-latest
 
-  
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Syntax check Streamlit app
+        run: |
+          python -m py_compile completed-streamlit-simulation.py
+
+      - name: Optional:Headless Streamlit run (dry test)
+        run: |
+          streamlit run completed-streamlit-simulation.py --server.headless true &
+          sleep 10
+          pkill streamlit
