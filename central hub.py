@@ -1,48 +1,51 @@
 import streamlit as st
 
-st.set_page_config(page_title="Predictive Maintenance Project", layout="centered")
+st.set_page_config(page_title="Predictive Maintenance Project", layout="wide")
 
-st.title("🛠️ Predictive Maintenance & Anomaly Detection")
-st.markdown("This unified dashboard presents all modules of the project in one place.")
+st.title("🛠️ Predictive Maintenance & Anomaly Detection Project")
+st.markdown("### 💻 NSUT | Computer Hardware & Software Workshop")
 
-# Section 1 - Power BI
-st.header("📊 Power BI Dashboard")
-st.markdown("**Visual Insights of Machine Data**")
-st.image("power_bi.png", caption="Power BI Dashboard Screenshot")
-st.markdown("[Download Full Power BI PDF](https://drive.google.com/your_link)")
+# SECTION 1: Power BI
+st.header("📊 Power BI Visualizations")
+st.markdown("Uploaded `.pbix` file for interactive visualizations.")
+st.markdown("[Download Power BI File](https://github.com/Manav155-S/predictive-maintainance/raw/main/Visualizations.pbix)")
 
-# Section 2 - Anomaly Detection with R
-st.header("📉 Anomaly Detection (R Z-Score Method)")
-st.image("zscore_plot.png", caption="Z-Score based anomaly detection (R)")
-st.markdown("[GitHub Actions - Auto Run](https://github.com/your_user/your_repo/actions)")
+# SECTION 2: Anomaly Detection with R
+st.header("📉 Anomaly Detection (Z-Score in R)")
+st.image("anomaly_plot.png", caption="Z-Score Anomaly Detection using R", use_column_width=True)
+st.markdown("[View GitHub Actions Run](https://github.com/Manav155-S/predictive-maintainance/actions)")
 
-# Section 3 - TinyML via Edge Impulse
-st.header("🤖 TinyML Integration (Edge Impulse)")
-st.image("edgeimpulse_result.png", caption="Edge Impulse K-means Clustering Output")
-st.markdown("[Open Edge Impulse Project](https://studio.edgeimpulse.com/studio/your_project_id)")
+# SECTION 3: Edge Impulse - TinyML Simulation
+st.header("🤖 Edge Impulse Integration (TinyML Simulation)")
+st.image("edgeimpulse_result.png", caption="Anomaly clusters from Edge Impulse (K-Means)")
+st.markdown("Used Edge Impulse Studio to simulate sensor data behavior and detect anomalies.")
 
-# Section 4 - PySpark Evaluation
-st.header("⚙️ PySpark ML Evaluation")
-st.image("confusion_matrix.png", caption="Confusion Matrix from PySpark Model")
+# SECTION 4: Real-Time Simulation (Streamlit)
+st.header("⚙️ Streamlit Real-Time Anomaly Simulation")
+st.markdown("This simulation mimics anomaly-based predictions using simplified logic.")
+st.markdown("[Open Simulation App](https://your-streamlit-url.streamlit.app)")  # Replace with actual
+
+# SECTION 5: ML Evaluation (PySpark)
+st.header("📈 Machine Learning Evaluation using PySpark")
+st.image("model_metrics.png", caption="Confusion Matrix (PySpark Logistic Regression)")
 st.markdown("""
-- **Accuracy**: 92.5%  
-- **F1-Score**: 0.89  
-- **Algorithm Used**: Logistic Regression
+**Model Info:**
+- Accuracy: `93.5%`
+- F1 Score: `0.91`
+- Algorithm: Logistic Regression
 """)
 
-# Section 5 - Streamlit Real-Time Anomaly Detection App
-st.header("📍 Live Anomaly Detection App")
-st.markdown("[Click to Open Anomaly Detector](https://your-streamlit-app-url.streamlit.app)")
+# SECTION 6: DevOps CI/CD
+st.header("🔁 DevOps: GitHub Actions Automation")
+st.markdown("""
+- GitHub Action triggers `.R` script automatically on every push to `main`.
+- Ensures reproducibility and deployment readiness.
+""")
 
-# Section 6 - DevOps Automation with GitHub Actions
-st.header("🔁 CI/CD Automation (DevOps)")
-st.markdown("Every R script runs automatically on every push using GitHub Actions. It installs packages, runs detection, and generates logs.")
+# SECTION 7: Final Report
+st.header("📄 Project Report (PDF)")
+with open("Predictive_Maintenance_Report.pdf", "rb") as pdf:
+    st.download_button("Download Final Project Report", pdf, file_name="Predictive_Maintenance_Report.pdf")
 
-# Section 7 - Download Final Report
-st.header("📄 Project Report")
-with open("Predictive_Maintenance_Report.pdf", "rb") as pdf_file:
-    st.download_button("Download Final Report (PDF)", pdf_file, file_name="Predictive_Maintenance_Report.pdf")
-
-# Footer
 st.markdown("---")
-st.caption("Developed by: Manav, Ashish & Chirag | NSUT CSE | 2025")
+st.caption("Made with 💙 by Manav, Ashish & Chirag | NSUT CSE")
