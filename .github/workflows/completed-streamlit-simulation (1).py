@@ -3,497 +3,442 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import time
 import random
 from datetime import datetime, timedelta
+from sklearn.ensemble import IsolationForest, RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+import warnings
+warnings.filterwarnings('ignore')
 
-# Configure page settings
-st.set_page_config(layout="wide", page_title="Maintenance Dashboard", page_icon="🔧")
+# Page configuration
+st.set_page_config(
+    page_title="AI-Powered Predictive Maintenance", 
+    page_icon="🔧", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Custom CSS for improved visuals
+# Custom CSS for better styling
 st.markdown("""
 <style>
-    .failure-card {
-        padding: 15px;
-        border-radius: 5px;
-        margin-bottom: 15px;
+    .main-header {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+        text-align: center;
+        color: white;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
-    .failure-card.error {
-        background-color: rgba(255, 99, 71, 0.2);
-        border-left: 5px solid #ff6347;
+    .metric-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border-left: 4px solid #667eea;
     }
-    .failure-card.warning {
-        background-color: rgba(255, 165, 0, 0.2);
-        border-left: 5px solid orange;
+    .stAlert {
+        border-radius: 8px;
     }
-    .failure-card.success {
-        background-color: rgba(0, 128, 0, 0.1);
-        border-left: 5px solid green;
-    }
-    .status-title {
-        font-weight: bold;
-        margin-bottom: 8px;
-        font-size: 1.1em;
-    }
-    .status-detail {
-        font-size: 0.95em;
-    }
-    /* Make tabs larger and more prominent */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        padding: 10px 16px;
-        font-size: 16px;
+    .sidebar .sidebar-content {
+        background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Title
-st.markdown("<h1 style='text-align: center; color: #1E88E5;'>Predictive Maintenance Dashboard</h1>", unsafe_allow_html=True)
+# Initialize ML models and scalers
+@st.cache_resource
+def initialize_models():
+    """Initialize and return ML models"""
+    anomaly_detector = IsolationForest(contamination=0.1, random_state=42)
+    failure_predictor = RandomForestRegressor(n_estimators=100, random_state=42)
+    scaler = StandardScaler()
+    return anomaly_detector, failure_predictor, scaler
+
+# Generate historical data for model training
+@st.cache_data
+def generate_historical_data(n_samples=10000):
+    """Generate synthetic historical data for model training"""
+    np.random.seed(42)
+    
+    # Generate normal operating conditions
+    normal_temp = np.random.normal(75, 8, int(n_samples * 0.8))
+    normal_pressure = np.random.normal(45, 10, int(n_samples * 0.8))
+    normal_vibration = np.random.normal(2.0, 0.8, int(n_samples * 0.8))
+    normal_humidity = np.random.normal(60, 15, int(n_samples * 0.8))
+    normal_rpm = np.random.normal(1500, 200, int(n_samples * 0.8))
+    
+    # Generate anomalous conditions
+    anomaly_temp = np.random.normal(95, 5, int(n_samples * 0.2))
+    anomaly_pressure = np.random.normal(75, 8, int(n_samples * 0.2))
+    anomaly_vibration = np.random.normal(4.5, 1.0, int(n_samples * 0.2))
+    anomaly_humidity = np.random.normal(85, 10, int(n_samples * 0.2))
+    anomaly_rpm = np.random.normal(1200, 300, int(n_samples * 0.2))
+    
+    # Combine data
+    temperature = np.concatenate([normal_temp, anomaly_temp])
+    pressure = np.concatenate([normal_pressure, anomaly_pressure])
+    vibration = np.concatenate([normal_vibration, anomaly_vibration])
+    humidity = np.concatenate([normal_humidity, anomaly_humidity])
+    rpm = np.concatenate([normal_rpm, anomaly_rpm])
+    
+    # Create timestamps
+    base_time = datetime.now() - timedelta(days=365)
+    timestamps = [base_time + timedelta(minutes=i*10) for i in range(n_samples)]
+    
+    # Calculate remaining useful life (RUL) - simplified model
+    rul = np.maximum(0, 1000 - 0.1 * temperature - 0.05 * pressure - 100 * vibration + np.random.normal(0, 50, n_samples))
+    
+    # Create machine IDs
+    machine_ids = np.random.choice(['M001', 'M002', 'M003', 'M004', 'M005'], n_samples)
+    
+    df = pd.DataFrame({
+        'timestamp': timestamps,
+        'machine_id': machine_ids,
+        'temperature': temperature,
+        'pressure': pressure,
+        'vibration': vibration,
+        'humidity': humidity,
+        'rpm': rpm,
+        'remaining_useful_life': rul
+    })
+    
+    return df
+
+# Train ML models
+@st.cache_resource
+def train_models():
+    """Train ML models on historical data"""
+    # Generate and prepare data
+    df = generate_historical_data()
+    
+    # Prepare features for anomaly detection
+    anomaly_features = ['temperature', 'pressure', 'vibration', 'humidity', 'rpm']
+    X_anomaly = df[anomaly_features].values
+    
+    # Prepare features for RUL prediction
+    rul_features = ['temperature', 'pressure', 'vibration', 'humidity', 'rpm']
+    X_rul = df[rul_features].values
+    y_rul = df['remaining_useful_life'].values
+    
+    # Initialize models
+    anomaly_detector, failure_predictor, scaler = initialize_models()
+    
+    # Train anomaly detector
+    X_anomaly_scaled = scaler.fit_transform(X_anomaly)
+    anomaly_detector.fit(X_anomaly_scaled)
+    
+    # Train RUL predictor
+    X_train, X_test, y_train, y_test = train_test_split(X_rul, y_rul, test_size=0.2, random_state=42)
+    failure_predictor.fit(X_train, y_train)
+    
+    # Calculate model performance
+    y_pred = failure_predictor.predict(X_test)
+    mse = mean_squared_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+    
+    return anomaly_detector, failure_predictor, scaler, mse, r2, df
+
+# Header
+st.markdown("""
+<div class="main-header">
+    <h1>🔧 AI-Powered Predictive Maintenance System</h1>
+    <p>Real-time Machine Health Monitoring with Advanced Analytics</p>
+</div>
+""", unsafe_allow_html=True)
+
+# Sidebar
+st.sidebar.markdown("### 🎛️ Control Panel")
+st.sidebar.markdown("---")
 
 # Initialize session state
-if 'initialized' not in st.session_state:
+if 'running' not in st.session_state:
     st.session_state.running = False
+if 'data' not in st.session_state:
     st.session_state.data = pd.DataFrame(columns=[
-        "Time", "Air_Temperature", "Process_Temperature", "Rotational_Speed", 
-        "Torque", "Tool_Wear", "Machine_Failure", "TWF", "HDF", "PWF", "OSF", "RNF"
+        "timestamp", "machine_id", "temperature", "pressure", 
+        "vibration", "humidity", "rpm", "anomaly_score", "predicted_rul"
     ])
-    st.session_state.next_maintenance = datetime.now() + timedelta(days=random.randint(10, 30))
-    st.session_state.anomaly_history = []
-    st.session_state.force_anomaly = False
-    st.session_state.iteration = 0
-    st.session_state.initialized = True
-    st.session_state.failure_details = None
-    st.session_state.failure_count = 0
 
-# Sidebar controls
-with st.sidebar:
-    st.header("Control Panel")
-    
-    if st.button("Start/Stop Monitoring"):
-        st.session_state.running = not st.session_state.running
-    
-    st.write("Status: " + ("✅ Active" if st.session_state.running else "⏹️ Paused"))
-    
-    st.subheader("Settings")
-    machine_type = st.selectbox("Machine Type", ["Production Line", "CNC Machine", "Industrial Robot"], index=0)
-    update_interval = st.slider("Update Speed", 1, 10, 3)
-    max_points = st.slider("History Length", 20, 100, 50)
-    
-    st.subheader("Thresholds")
-    col1, col2 = st.columns(2)
-    with col1:
-        air_temp_threshold = st.number_input("Air Temp (K)", 300, 350, 330, step=5)
-        process_temp_threshold = st.number_input("Process Temp (K)", 310, 360, 340, step=5)
-    with col2:
-        torque_threshold = st.number_input("Torque (Nm)", 35, 80, 60, step=5)
-        tool_wear_threshold = st.number_input("Tool Wear (min)", 150, 250, 200, step=10)
-    
-    st.subheader("Test Anomalies")
-    anomaly_options = ["Random Failure", "Tool Wear Failure", "Heat Failure", "Power Failure", "Overstrain Failure"]
-    selected_anomaly = st.selectbox("Anomaly Type", anomaly_options)
-    
-    if st.button("Force Selected Failure"):
-        st.session_state.force_anomaly = True
-        st.session_state.forced_anomaly_type = selected_anomaly
-    
-    st.subheader("Maintenance")
-    if st.button("Perform Maintenance"):
-        current_time = datetime.now().strftime("%H:%M:%S")
-        st.session_state.next_maintenance = datetime.now() + timedelta(days=random.randint(10, 30))
-        # Reset tool wear
-        if not st.session_state.data.empty:
-            last_row = st.session_state.data.iloc[-1].copy()
-            last_row["Tool_Wear"] = 0
-            st.session_state.data.iloc[-1] = last_row
+# Machine selection
+selected_machine = st.sidebar.selectbox(
+    "Select Machine ID:",
+    ["M001", "M002", "M003", "M004", "M005"],
+    index=0
+)
 
-# Create main layout
-col1, col2 = st.columns([3, 2])
+# Simulation controls
+st.sidebar.markdown("### Simulation Controls")
+simulation_speed = st.sidebar.slider("Simulation Speed (seconds)", 0.5, 5.0, 1.0, 0.5)
+add_noise = st.sidebar.checkbox("Add Sensor Noise", value=True)
 
-# The main simulation function
-def generate_data():
-    # Keep data within size limit
-    if len(st.session_state.data) > max_points:
-        st.session_state.data = st.session_state.data.iloc[-max_points:]
+# Model information
+st.sidebar.markdown("### 🤖 Model Information")
+with st.sidebar.expander("Model Performance"):
+    # Train models and get performance metrics
+    anomaly_detector, failure_predictor, scaler, mse, r2, historical_df = train_models()
     
-    # Get last values or initialize defaults
-    if len(st.session_state.data) > 0:
-        last_air_temp = st.session_state.data["Air_Temperature"].iloc[-1]
-        last_process_temp = st.session_state.data["Process_Temperature"].iloc[-1]
-        last_rpm = st.session_state.data["Rotational_Speed"].iloc[-1]
-        last_torque = st.session_state.data["Torque"].iloc[-1]
-        last_tool_wear = st.session_state.data["Tool_Wear"].iloc[-1]
+    st.metric("RUL Model R² Score", f"{r2:.3f}")
+    st.metric("RUL Model MSE", f"{mse:.2f}")
+    st.info("Models trained on 10,000 historical data points")
+
+# Start/Stop button
+if st.sidebar.button("🚀 Start Simulation" if not st.session_state.running else "⏹️ Stop Simulation"):
+    st.session_state.running = not st.session_state.running
+
+# Display current status
+if st.session_state.running:
+    st.sidebar.success("✅ Simulation Running")
+else:
+    st.sidebar.info("⏸️ Simulation Stopped")
+
+# Main dashboard
+col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+
+# Placeholders for real-time updates
+metrics_placeholder = st.empty()
+charts_placeholder = st.empty()
+alerts_placeholder = st.empty()
+analysis_placeholder = st.empty()
+
+# Main simulation loop
+while st.session_state.running:
+    # Generate realistic sensor readings
+    base_temp = 75 + np.sin(time.time() / 100) * 10
+    base_pressure = 45 + np.sin(time.time() / 80) * 5
+    base_vibration = 2.0 + np.sin(time.time() / 60) * 0.5
+    base_humidity = 60 + np.sin(time.time() / 120) * 10
+    base_rpm = 1500 + np.sin(time.time() / 90) * 100
+    
+    # Add noise if enabled
+    if add_noise:
+        noise_factor = 0.1
+        temperature = base_temp + np.random.normal(0, noise_factor * base_temp)
+        pressure = base_pressure + np.random.normal(0, noise_factor * base_pressure)
+        vibration = base_vibration + np.random.normal(0, noise_factor * base_vibration)
+        humidity = base_humidity + np.random.normal(0, noise_factor * base_humidity)
+        rpm = base_rpm + np.random.normal(0, noise_factor * base_rpm)
     else:
-        last_air_temp, last_process_temp = 298.0, 308.0
-        last_rpm, last_torque, last_tool_wear = 1500, 40.0, 0
+        temperature, pressure, vibration, humidity, rpm = base_temp, base_pressure, base_vibration, base_humidity, base_rpm
     
-    # Simulate sensor readings with realistic patterns
-    tool_wear = last_tool_wear + random.uniform(0.8, 2.2)
-    air_temp = max(285, min(345, last_air_temp + random.uniform(-1.2, 1.8)))
-    process_temp = max(295, min(355, last_process_temp + random.uniform(-0.8, 1.2)))
-    rpm_variance = 50
-    rpm = max(1000, min(2500, last_rpm + random.uniform(-rpm_variance, rpm_variance)))
-    torque = max(20, min(80, last_torque + random.uniform(-3, 3)))
+    # Occasionally simulate equipment degradation
+    if random.random() < 0.1:  # 10% chance of anomaly
+        temperature += random.uniform(15, 25)
+        pressure += random.uniform(20, 30)
+        vibration += random.uniform(2, 3)
     
-    # Initialize failure indicators
-    machine_failure = twf = hdf = pwf = osf = rnf = 0
+    # Prepare data for ML predictions
+    current_features = np.array([[temperature, pressure, vibration, humidity, rpm]])
+    current_features_scaled = scaler.transform(current_features)
     
-    # Store failure reasons and insights
-    failure_reasons = []
-    prediction_insights = []
+    # Predict anomaly score
+    anomaly_score = anomaly_detector.decision_function(current_features_scaled)[0]
+    is_anomaly = anomaly_detector.predict(current_features_scaled)[0] == -1
     
-    # Check for failures based on thresholds
-    if air_temp > air_temp_threshold:
-        hdf = machine_failure = 1
-        failure_reasons.append(f"Air temperature spike: {air_temp:.1f}K > {air_temp_threshold}K")
-        prediction_insights.append("Check cooling system - potential fan failure")
+    # Predict remaining useful life
+    predicted_rul = failure_predictor.predict(current_features)[0]
     
-    if process_temp > process_temp_threshold:
-        hdf = machine_failure = 1
-        failure_reasons.append(f"Process temperature critical: {process_temp:.1f}K > {process_temp_threshold}K")
-        prediction_insights.append("Investigate heat dissipation and lubrication")
-    
-    if torque > torque_threshold:
-        osf = machine_failure = 1
-        failure_reasons.append(f"Excessive torque: {torque:.1f}Nm > {torque_threshold}Nm")
-        prediction_insights.append("Check for mechanical obstructions")
-    
-    if tool_wear > tool_wear_threshold:
-        twf = machine_failure = 1
-        failure_reasons.append(f"Tool critically worn: {tool_wear:.1f}min > {tool_wear_threshold}min")
-        prediction_insights.append("Replace cutting tool immediately")
-        
-    if rpm < 800:
-        pwf = machine_failure = 1
-        failure_reasons.append(f"RPM drop: {rpm:.0f}RPM < 800RPM")
-        prediction_insights.append("Investigate power supply or motor issues")
-    
-    # Random failure probability
-    if random.random() < 0.01:
-        rnf = machine_failure = 1
-        failure_reasons.append("Unexpected system anomaly detected")
-        prediction_insights.append("Run diagnostic tests on control systems")
-    
-    # Force failure if button was pressed
-    if st.session_state.force_anomaly:
-        if hasattr(st.session_state, 'forced_anomaly_type'):
-            failure_type = st.session_state.forced_anomaly_type
-            
-            if failure_type == "Tool Wear Failure":
-                twf = 1
-                failure_reasons.append(f"Manual simulation: Tool wear failure (wear: {tool_wear:.1f}min)")
-                prediction_insights.append("Replace tool and check calibration")
-            elif failure_type == "Heat Failure":
-                hdf = 1
-                failure_reasons.append(f"Manual simulation: Heat failure (air: {air_temp:.1f}K)")
-                prediction_insights.append("Check coolant levels and cooling system")
-            elif failure_type == "Power Failure":
-                pwf = 1
-                failure_reasons.append(f"Manual simulation: Power failure (RPM: {rpm:.0f})")
-                prediction_insights.append("Inspect power connections and controller")
-            elif failure_type == "Overstrain Failure":
-                osf = 1
-                failure_reasons.append(f"Manual simulation: Overstrain (torque: {torque:.1f}Nm)")
-                prediction_insights.append("Check mechanical alignment")
-            else:
-                rnf = 1
-                failure_reasons.append("Manual simulation: Random system failure")
-                prediction_insights.append("Run full system diagnostics")
-                
-        machine_failure = 1
-        st.session_state.force_anomaly = False
-    
-    current_time = datetime.now().strftime("%H:%M:%S")
-    
-    # Add new data point
+    # Add to session data
+    current_time = datetime.now()
     new_data = pd.DataFrame([[
-        current_time, air_temp, process_temp, rpm, torque, tool_wear,
-        machine_failure, twf, hdf, pwf, osf, rnf
+        current_time, selected_machine, temperature, pressure, vibration, 
+        humidity, rpm, anomaly_score, predicted_rul
     ]], columns=st.session_state.data.columns)
     
     st.session_state.data = pd.concat([st.session_state.data, new_data], ignore_index=True)
     
-    # Update failure count and store details
-    if machine_failure:
-        st.session_state.failure_count += 1
+    # Keep only last 50 records for display
+    if len(st.session_state.data) > 50:
+        st.session_state.data = st.session_state.data.tail(50).reset_index(drop=True)
+    
+    # Display real-time metrics
+    with metrics_placeholder.container():
+        col1, col2, col3, col4 = st.columns(4)
         
-        failure_types = []
-        if twf: failure_types.append("Tool Wear")
-        if hdf: failure_types.append("Heat Dissipation")
-        if pwf: failure_types.append("Power")
-        if osf: failure_types.append("Overstrain")
-        if rnf: failure_types.append("Random")
-        
-        st.session_state.failure_details = {
-            "time": current_time,
-            "types": failure_types,
-            "reasons": failure_reasons,
-            "insights": prediction_insights
-        }
-        
-        # Record anomalies for history
-        st.session_state.anomaly_history.append({
-            "time": current_time,
-            "types": failure_types,
-            "reasons": failure_reasons,
-            "insights": prediction_insights
-        })
-        
-        # Keep only recent anomalies
-        if len(st.session_state.anomaly_history) > 10:
-            st.session_state.anomaly_history.pop(0)
-    else:
-        st.session_state.failure_details = None
-
-# Main dashboard area
-with col1:
-    if not st.session_state.data.empty:
-        # Create the sensor charts in tabs with larger size for better visibility
-        tab1, tab2 = st.tabs(["Temperature Parameters", "Mechanical Parameters"])
-        
-        with tab1:
-            # Temperature charts with increased height
-            st.markdown("### Temperature Monitoring")
-            
-            # Air Temperature chart
-            fig_air = px.line(st.session_state.data, x="Time", y="Air_Temperature", 
-                            title="Air Temperature (K)")
-            fig_air.add_hline(y=air_temp_threshold, line_dash="dash", line_color="red", 
-                            annotation_text="Threshold", annotation_position="bottom right")
-            fig_air.update_traces(line_color='#1f77b4', line_width=4)
-            fig_air.update_layout(
-                height=400,  # Increased height
-                plot_bgcolor='rgba(240, 240, 240, 0.5)', 
-                paper_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=20, r=20, t=40, b=20),
-                xaxis=dict(showgrid=True),
-                yaxis=dict(showgrid=True)
+        with col1:
+            st.metric(
+                "🌡️ Temperature", 
+                f"{temperature:.1f}°C",
+                delta=f"{temperature - 75:.1f}°C" if len(st.session_state.data) > 1 else None
             )
-            st.plotly_chart(fig_air, use_container_width=True)
-            
-            # Process Temperature chart
-            fig_process = px.line(st.session_state.data, x="Time", y="Process_Temperature", 
-                                title="Process Temperature (K)")
-            fig_process.add_hline(y=process_temp_threshold, line_dash="dash", line_color="red",
-                                annotation_text="Threshold", annotation_position="bottom right")
-            fig_process.update_traces(line_color='#ff7f0e', line_width=4)
-            fig_process.update_layout(
-                height=400,
-                plot_bgcolor='rgba(240, 240, 240, 0.5)', 
-                paper_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=20, r=20, t=40, b=20),
-                xaxis=dict(showgrid=True),
-                yaxis=dict(showgrid=True)
+        
+        with col2:
+            st.metric(
+                "🔧 Pressure", 
+                f"{pressure:.1f} Bar",
+                delta=f"{pressure - 45:.1f} Bar" if len(st.session_state.data) > 1 else None
             )
-            st.plotly_chart(fig_process, use_container_width=True)
         
-        with tab2:
-            # Mechanical parameters
-            st.markdown("### Mechanical Parameter Monitoring")
-            
-            # Use columns for better organization
-            col1a, col1b = st.columns(2)
-            
-            with col1a:
-                # RPM chart
-                fig_rpm = px.line(st.session_state.data, x="Time", y="Rotational_Speed", 
-                                title="Rotational Speed (RPM)")
-                fig_rpm.update_traces(line_color='#2ca02c', line_width=4)
-                fig_rpm.add_hline(y=800, line_dash="dash", line_color="red", 
-                                annotation_text="Min RPM", annotation_position="bottom right")
-                fig_rpm.update_layout(
-                    height=350,
-                    plot_bgcolor='rgba(240, 240, 240, 0.5)', 
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    margin=dict(l=20, r=20, t=40, b=20),
-                    xaxis=dict(showgrid=True),
-                    yaxis=dict(showgrid=True)
-                )
-                st.plotly_chart(fig_rpm, use_container_width=True)
-            
-            with col1b:
-                # Torque chart
-                fig_torque = px.line(st.session_state.data, x="Time", y="Torque", 
-                                    title="Torque (Nm)")
-                fig_torque.add_hline(y=torque_threshold, line_dash="dash", line_color="red",
-                                    annotation_text="Threshold", annotation_position="bottom right")
-                fig_torque.update_traces(line_color='#d62728', line_width=4)
-                fig_torque.update_layout(
-                    height=350,
-                    plot_bgcolor='rgba(240, 240, 240, 0.5)', 
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    margin=dict(l=20, r=20, t=40, b=20),
-                    xaxis=dict(showgrid=True),
-                    yaxis=dict(showgrid=True)
-                )
-                st.plotly_chart(fig_torque, use_container_width=True)
-            
-            # Tool wear chart - full width
-            fig_wear = px.line(st.session_state.data, x="Time", y="Tool_Wear", 
-                            title="Tool Wear (min)")
-            fig_wear.add_hline(y=tool_wear_threshold, line_dash="dash", line_color="red",
-                            annotation_text="Replacement Threshold", annotation_position="bottom right")
-            fig_wear.add_hline(y=tool_wear_threshold*0.7, line_dash="dot", line_color="orange",
-                            annotation_text="Warning Level", annotation_position="bottom right")
-            fig_wear.update_traces(line_color='#9467bd', line_width=4)
-            fig_wear.update_layout(
-                height=350,
-                plot_bgcolor='rgba(240, 240, 240, 0.5)', 
-                paper_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=20, r=20, t=40, b=20),
-                xaxis=dict(showgrid=True),
-                yaxis=dict(showgrid=True)
+        with col3:
+            st.metric(
+                "📳 Vibration", 
+                f"{vibration:.2f} mm/s",
+                delta=f"{vibration - 2.0:.2f} mm/s" if len(st.session_state.data) > 1 else None
             )
-            st.plotly_chart(fig_wear, use_container_width=True)
-
-# Right column for status and failure information
-with col2:
-    # Enhanced failure information
-    st.subheader("System Status")
-    
-    if not st.session_state.data.empty:
-        latest_data = st.session_state.data.iloc[-1]
         
-        # Current status indicator
-        if latest_data["Machine_Failure"]:
-            failure_types = []
-            if latest_data["TWF"]: failure_types.append("Tool Wear")
-            if latest_data["HDF"]: failure_types.append("Heat Dissipation")
-            if latest_data["PWF"]: failure_types.append("Power")
-            if latest_data["OSF"]: failure_types.append("Overstrain")
-            if latest_data["RNF"]: failure_types.append("Random")
+        with col4:
+            rul_color = "normal" if predicted_rul > 200 else "inverse"
+            st.metric(
+                "⏰ Predicted RUL", 
+                f"{predicted_rul:.0f} hours",
+                delta=f"{'⚠️' if predicted_rul < 100 else '✅'} {'Critical' if predicted_rul < 100 else 'Good'}"
+            )
+    
+    # Display charts
+    with charts_placeholder.container():
+        if len(st.session_state.data) > 1:
+            # Create subplots
+            fig = make_subplots(
+                rows=2, cols=2,
+                subplot_titles=('Temperature Trend', 'Pressure & Vibration', 'Anomaly Score', 'RUL Prediction'),
+                specs=[[{"secondary_y": False}, {"secondary_y": True}],
+                       [{"secondary_y": False}, {"secondary_y": False}]]
+            )
             
-            # Display current failure with reasons
-            st.markdown(f"""
-            <div class="failure-card error">
-                <div class="status-title">🚨 MACHINE FAILURE DETECTED</div>
-                <div class="status-detail">
-                    <b>Failure type(s):</b> {", ".join(failure_types)}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            # Temperature plot
+            fig.add_trace(
+                go.Scatter(
+                    x=st.session_state.data['timestamp'],
+                    y=st.session_state.data['temperature'],
+                    mode='lines+markers',
+                    name='Temperature',
+                    line=dict(color='red', width=2)
+                ),
+                row=1, col=1
+            )
             
-            # Show failure reasons and actionable insights
-            if st.session_state.failure_details:
-                with st.expander("Failure Details", expanded=True):
-                    for reason in st.session_state.failure_details["reasons"]:
-                        st.warning(reason)
-                
-                with st.expander("Recommended Actions", expanded=True):
-                    for insight in st.session_state.failure_details["insights"]:
-                        st.info(insight)
-        else:
-            st.markdown("""
-            <div class="failure-card success">
-                <div class="status-title">✅ SYSTEM OPERATING NORMALLY</div>
-                <div class="status-detail">
-                    All parameters within acceptable ranges
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Failure history with improved visuals
-    st.subheader("Failure History")
-    
-    if st.session_state.anomaly_history:
-        # Summary stats
-        st.markdown(f"**Total failures detected:** {st.session_state.failure_count}")
-        
-        # Show pie chart of failure types if there are failures
-        if st.session_state.failure_count > 0:
-            failure_types = ["TWF", "HDF", "PWF", "OSF", "RNF"]
-            failure_counts = [st.session_state.data[ft].sum() for ft in failure_types]
+            # Pressure and Vibration plot
+            fig.add_trace(
+                go.Scatter(
+                    x=st.session_state.data['timestamp'],
+                    y=st.session_state.data['pressure'],
+                    mode='lines+markers',
+                    name='Pressure',
+                    line=dict(color='blue', width=2)
+                ),
+                row=1, col=2
+            )
             
-            if sum(failure_counts) > 0:
-                fig_failure_dist = go.Figure(data=[go.Pie(
-                    labels=["Tool Wear", "Heat Dissipation", "Power", "Overstrain", "Random"],
-                    values=failure_counts,
-                    hole=.4,
-                    marker_colors=['#ff9ff3','#feca57','#1dd1a1','#54a0ff','#5f27cd']
-                )])
-                fig_failure_dist.update_layout(
-                    title="Failure Type Distribution",
-                    height=300,
-                    margin=dict(l=20, r=20, t=40, b=20)
-                )
-                st.plotly_chart(fig_failure_dist, use_container_width=True)
-        
-        # Recent failure log with detailed information
-        st.markdown("#### Recent Failure Log")
-        for anomaly in reversed(st.session_state.anomaly_history):
-            with st.expander(f"🕒 {anomaly['time']} - {', '.join(anomaly['types'])} Failure"):
-                st.markdown("**Detected issues:**")
-                for reason in anomaly["reasons"]:
-                    st.markdown(f"- {reason}")
-                
-                st.markdown("**Recommended actions:**")
-                for insight in anomaly["insights"]:
-                    st.markdown(f"- {insight}")
-    else:
-        st.success("No failures detected in recent history")
-    
-    # Maintenance recommendations section
-    st.subheader("Maintenance Information")
-    
-    # Display current tool wear status and prediction
-    if not st.session_state.data.empty:
-        current_wear = st.session_state.data["Tool_Wear"].iloc[-1]
-        wear_percentage = (current_wear / tool_wear_threshold) * 100
-        
-        # Create progress bar for tool wear
-        st.markdown("#### Tool Wear Status")
-        wear_color = "green" if wear_percentage < 70 else "orange" if wear_percentage < 90 else "red"
-        st.markdown(f"""
-        <div style="margin-bottom: 10px;">Current: {current_wear:.1f}min / {tool_wear_threshold}min ({wear_percentage:.1f}%)</div>
-        <div style="background-color: #e0e0e0; border-radius: 10px; height: 20px;">
-            <div style="background-color: {wear_color}; width: {min(100, wear_percentage)}%; height: 100%; border-radius: 10px;"></div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Maintenance recommendation based on wear
-        if wear_percentage > 90:
-            st.error("🚨 **CRITICAL:** Schedule immediate tool replacement")
-        elif wear_percentage > 70:
-            st.warning("⚠️ **WARNING:** Plan for tool replacement soon")
-        else:
-            next_maint = st.session_state.next_maintenance.strftime("%b %d, %Y")
-            st.info(f"✓ Tool in good condition. Next scheduled maintenance: {next_maint}")
-        
-        # Predictive information
-        if wear_percentage > 50:
-            # Simple linear prediction
-            remaining_cycles = int((tool_wear_threshold - current_wear) / (st.session_state.data["Tool_Wear"].diff().mean() or 1))
-            st.markdown(f"**Estimated remaining operational time:** ~{remaining_cycles} cycles")
+            fig.add_trace(
+                go.Scatter(
+                    x=st.session_state.data['timestamp'],
+                    y=st.session_state.data['vibration'],
+                    mode='lines+markers',
+                    name='Vibration',
+                    line=dict(color='green', width=2),
+                    yaxis='y2'
+                ),
+                row=1, col=2, secondary_y=True
+            )
             
-            # Failure probability based on current conditions
-            if wear_percentage > 80:
-                st.markdown("**Failure probability:** High ⚠️")
-            elif wear_percentage > 60:
-                st.markdown("**Failure probability:** Medium 🔍")
+            # Anomaly score plot
+            colors = ['red' if score < -0.1 else 'green' for score in st.session_state.data['anomaly_score']]
+            fig.add_trace(
+                go.Scatter(
+                    x=st.session_state.data['timestamp'],
+                    y=st.session_state.data['anomaly_score'],
+                    mode='lines+markers',
+                    name='Anomaly Score',
+                    line=dict(color='orange', width=2),
+                    marker=dict(color=colors)
+                ),
+                row=2, col=1
+            )
+            
+            # RUL prediction plot
+            fig.add_trace(
+                go.Scatter(
+                    x=st.session_state.data['timestamp'],
+                    y=st.session_state.data['predicted_rul'],
+                    mode='lines+markers',
+                    name='Predicted RUL',
+                    line=dict(color='purple', width=2)
+                ),
+                row=2, col=2
+            )
+            
+            fig.update_layout(height=600, showlegend=True, title_text="Real-time Machine Health Analytics")
+            st.plotly_chart(fig, use_container_width=True)
+    
+    # Display alerts and analysis
+    with alerts_placeholder.container():
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 🚨 System Alerts")
+            alerts = []
+            
+            if temperature > 90:
+                alerts.append(f"🔥 **High Temperature**: {temperature:.1f}°C (Threshold: 90°C)")
+            if pressure > 70:
+                alerts.append(f"⚠️ **High Pressure**: {pressure:.1f} Bar (Threshold: 70 Bar)")
+            if vibration > 4.0:
+                alerts.append(f"📳 **High Vibration**: {vibration:.2f} mm/s (Threshold: 4.0 mm/s)")
+            if is_anomaly:
+                alerts.append(f"🤖 **ML Anomaly Detected**: Score {anomaly_score:.3f}")
+            if predicted_rul < 100:
+                alerts.append(f"⏰ **Maintenance Required**: RUL {predicted_rul:.0f} hours")
+            
+            if alerts:
+                for alert in alerts:
+                    st.error(alert)
             else:
-                st.markdown("**Failure probability:** Low ✓")
+                st.success("✅ All systems operating normally")
+        
+        with col2:
+            st.markdown("### 📊 AI Analysis")
+            
+            # Health score calculation
+            health_score = 100 - (
+                max(0, (temperature - 75) / 25 * 30) +
+                max(0, (pressure - 45) / 35 * 25) +
+                max(0, (vibration - 2.0) / 3.0 * 25) +
+                max(0, (-anomaly_score + 0.1) / 0.5 * 20)
+            )
+            health_score = max(0, min(100, health_score))
+            
+            # Display health score with color coding
+            if health_score > 80:
+                st.success(f"🟢 **Machine Health Score**: {health_score:.1f}/100 (Excellent)")
+            elif health_score > 60:
+                st.warning(f"🟡 **Machine Health Score**: {health_score:.1f}/100 (Good)")
+            else:
+                st.error(f"🔴 **Machine Health Score**: {health_score:.1f}/100 (Poor)")
+            
+            # Maintenance recommendations
+            if predicted_rul < 100:
+                st.info("📋 **Recommendation**: Schedule immediate maintenance")
+            elif predicted_rul < 200:
+                st.info("📋 **Recommendation**: Plan maintenance within 1 week")
+            else:
+                st.info("📋 **Recommendation**: Continue normal operation")
+    
+    # Wait before next iteration
+    time.sleep(simulation_speed)
 
-# Auto-update mechanism
-if st.session_state.running:
-    # Update data
-    generate_data()
+# Footer when simulation is stopped
+if not st.session_state.running:
+    st.markdown("---")
+    st.markdown("""
+    ### 📈 Project Features:
+    - **Real-time Monitoring**: Live sensor data visualization
+    - **Anomaly Detection**: ML-based anomaly detection using Isolation Forest
+    - **Predictive Maintenance**: Remaining Useful Life (RUL) prediction using Random Forest
+    - **Interactive Dashboard**: Professional UI with real-time updates
+    - **Alert System**: Intelligent alerting based on thresholds and ML predictions
+    - **Health Scoring**: Comprehensive machine health assessment
     
-    # Increment iteration counter
-    st.session_state.iteration += 1
+    ### 🛠️ Technologies Used:
+    - **Frontend**: Streamlit, Plotly
+    - **Machine Learning**: Scikit-learn (Isolation Forest, Random Forest)
+    - **Data Processing**: Pandas, NumPy
+    - **Visualization**: Plotly, Custom CSS
+    """)
     
-    # Auto-refresh using streamlit's rerun
-    if "last_update" not in st.session_state:
-        st.session_state.last_update = time.time()
-
-    current_time = time.time()
-    elapsed = current_time - st.session_state.last_update
-    
-    if elapsed >= (1.0 / update_interval * 2):
-        st.session_state.last_update = current_time
-        time.sleep(0.1)  # Prevent CPU overuse
-        st.rerun()
-else:
-    # Generate initial data point if needed
-    if st.session_state.data.empty:
-        generate_data()
+    # Display sample of historical data
+    if st.checkbox("Show Historical Training Data Sample"):
+        st.dataframe(historical_df.head(100))
